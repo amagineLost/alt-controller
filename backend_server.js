@@ -7,9 +7,11 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage for commands (in production, use a database)
+// In-memory storage for commands and users (in production, use a database)
 let commands = [];
 let connectedClients = new Set();
+let registeredUsers = new Map(); // Store all script users
+let authorizedUsers = new Set(); // Store authorized admin users
 
 // Optional API Key validation (can be disabled)
 const API_KEY = process.env.API_KEY || null;
@@ -72,40 +74,36 @@ app.post('/api/command', (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Handle coordinated commands specially
-        if (command === 'coordinated') {
-            const coordinatedData = sanitizeCommandData(args);
-            if (!validateCoordinatedCommand(coordinatedData)) {
-                return res.status(400).json({ error: 'Invalid coordinated command data' });
-            }
-
-            // Create coordinated command object
-            const commandObj = {
-                id: Date.now().toString(),
+        // Handle user registration
+        if (command === 'register') {
+            const userData = args;
+            registeredUsers.set(playerId, {
                 scriptId,
                 playerId,
                 playerName,
-                command: 'coordinated',
-                args: coordinatedData,
-                timestamp,
-                createdAt: new Date().toISOString(),
-                isCoordinated: true
-            };
-
-            // Store command
-            commands.push(commandObj);
-
-            console.log(`🎯 Coordinated command received: ${coordinatedData.command} from ${playerName} (${playerId})`);
-            console.log(`🎯 Target alts: ${coordinatedData.targetAlts || 'all'}`);
-            console.log(`🎯 Command data:`, JSON.stringify(coordinatedData, null, 2));
-
-            res.json({ 
-                success: true, 
-                message: 'Coordinated command received',
-                commandId: commandObj.id
+                isAuthorized: userData.isAuthorized,
+                timestamp: Date.now()
             });
-        } else {
-            // Regular command
+            
+            if (userData.isAuthorized) {
+                authorizedUsers.add(playerName);
+            }
+            
+            console.log(`👤 User registered: ${playerName} (${playerId}) - ${userData.isAuthorized ? 'Admin' : 'Alt'}`);
+            console.log(`📊 Total users: ${registeredUsers.size}, Admins: ${authorizedUsers.size}`);
+            
+            return res.json({ 
+                success: true, 
+                message: 'User registered successfully',
+                isAuthorized: userData.isAuthorized
+            });
+        }
+
+        // Handle admin commands (from authorized users)
+        if (authorizedUsers.has(playerName)) {
+            console.log(`👑 Admin command: ${command} from ${playerName}`);
+            
+            // Create admin command object
             const commandObj = {
                 id: Date.now().toString(),
                 scriptId,
@@ -115,13 +113,38 @@ app.post('/api/command', (req, res) => {
                 args: args || {},
                 timestamp,
                 createdAt: new Date().toISOString(),
-                isCoordinated: false
+                isAdminCommand: true,
+                targetAlts: "all" // Send to all non-admin users
             };
 
             // Store command
             commands.push(commandObj);
 
-            console.log(`📨 Command received: ${command} from ${playerName} (${playerId})`);
+            console.log(`🎯 Admin command distributed: ${command} from ${playerName} to all alts`);
+
+            res.json({ 
+                success: true, 
+                message: 'Admin command distributed',
+                commandId: commandObj.id
+            });
+        } else {
+            // Regular command from alt users
+            const commandObj = {
+                id: Date.now().toString(),
+                scriptId,
+                playerId,
+                playerName,
+                command,
+                args: args || {},
+                timestamp,
+                createdAt: new Date().toISOString(),
+                isAdminCommand: false
+            };
+
+            // Store command
+            commands.push(commandObj);
+
+            console.log(`📨 Alt command: ${command} from ${playerName} (${playerId})`);
 
             res.json({ 
                 success: true, 
@@ -156,6 +179,10 @@ app.get('/api/commands', (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
+        // Get current user info
+        const currentUser = registeredUsers.get(playerId);
+        const isCurrentUserAdmin = currentUser ? currentUser.isAuthorized : false;
+        
         // Filter commands for this script and exclude commands from this player
         const filteredCommands = commands.filter(cmd => {
             // Basic filtering
@@ -168,12 +195,14 @@ app.get('/api/commands', (req, res) => {
                 return false;
             }
             
-            // For coordinated commands, check if this player should receive it
-            if (cmd.isCoordinated && cmd.args.targetAlts) {
-                const targetAlts = cmd.args.targetAlts;
-                if (targetAlts !== 'all' && targetAlts !== playerId) {
-                    return false; // This player is not targeted
-                }
+            // Admin commands: only send to non-admin users
+            if (cmd.isAdminCommand && isCurrentUserAdmin) {
+                return false; // Don't send admin commands back to admins
+            }
+            
+            // Regular commands: only send to admins
+            if (!cmd.isAdminCommand && !isCurrentUserAdmin) {
+                return false; // Don't send alt commands to other alts
             }
             
             return true;
@@ -197,8 +226,42 @@ app.get('/api/status', (req, res) => {
         status: 'online',
         timestamp: new Date().toISOString(),
         commandsCount: commands.length,
-        connectedClients: connectedClients.size
+        connectedClients: connectedClients.size,
+        registeredUsers: registeredUsers.size,
+        authorizedUsers: authorizedUsers.size
     });
+});
+
+// GET /api/users - Get list of registered users
+app.get('/api/users', (req, res) => {
+    try {
+        // Validate API key
+        if (!validateApiKey(req)) {
+            return res.status(401).json({ error: 'Invalid API key' });
+        }
+
+        const users = [];
+        for (const [playerId, userData] of registeredUsers) {
+            users.push({
+                playerId: userData.playerId,
+                playerName: userData.playerName,
+                isAuthorized: userData.isAuthorized,
+                timestamp: userData.timestamp
+            });
+        }
+
+        res.json({ 
+            success: true, 
+            users: users,
+            totalUsers: users.length,
+            adminUsers: users.filter(u => u.isAuthorized).length,
+            altUsers: users.filter(u => !u.isAuthorized).length
+        });
+
+    } catch (error) {
+        console.error('Error retrieving users:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // GET / - Root endpoint
