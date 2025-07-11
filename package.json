@@ -1,0 +1,32 @@
+{
+  "name": "roblox-script-backend",
+  "version": "2.0.0",
+  "description": "Smart backend server for coordinated Roblox script command distribution with alt management",
+  "main": "backend_server.js",
+  "scripts": {
+    "start": "node backend_server.js",
+    "dev": "nodemon backend_server.js"
+  },
+  "keywords": [
+    "roblox",
+    "script",
+    "backend",
+    "command",
+    "distribution",
+    "alt-management",
+    "coordinated-commands",
+    "formation-following"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+} 
