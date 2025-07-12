@@ -92,6 +92,9 @@ app.post('/api/command', (req, res) => {
             console.log(`👤 User registered: ${playerName} (${playerId}) - ${userData.isAuthorized ? 'Admin' : 'Alt'}`);
             console.log(`📊 Total users: ${registeredUsers.size}, Admins: ${authorizedUsers.size}`);
             
+            // Debug: print all registered users
+            console.log('Registered users:', Array.from(registeredUsers.values()));
+            
             return res.json({ 
                 success: true, 
                 message: 'User registered successfully',
@@ -120,6 +123,15 @@ app.post('/api/command', (req, res) => {
             // Store command
             commands.push(commandObj);
 
+            // Debug: print all commands
+            console.log('Current commands in queue:', commands.map(cmd => ({
+                command: cmd.command,
+                isAdminCommand: cmd.isAdminCommand,
+                playerName: cmd.playerName,
+                args: cmd.args,
+                timestamp: cmd.timestamp
+            })));
+
             console.log(`🎯 Admin command distributed: ${command} from ${playerName} to all alts`);
 
             res.json({ 
@@ -143,6 +155,15 @@ app.post('/api/command', (req, res) => {
 
             // Store command
             commands.push(commandObj);
+
+            // Debug: print all commands
+            console.log('Current commands in queue:', commands.map(cmd => ({
+                command: cmd.command,
+                isAdminCommand: cmd.isAdminCommand,
+                playerName: cmd.playerName,
+                args: cmd.args,
+                timestamp: cmd.timestamp
+            })));
 
             console.log(`📨 Alt command: ${command} from ${playerName} (${playerId})`);
 
@@ -184,6 +205,9 @@ app.get('/api/commands', (req, res) => {
         const isCurrentUserAdmin = currentUser ? currentUser.isAuthorized : false;
         const currentUserName = currentUser ? currentUser.playerName : null;
 
+        // Debug: print polling user
+        console.log('Polling user:', currentUser);
+
         // Filter commands for this script and exclude commands from this player
         const filteredCommands = commands.filter(cmd => {
             if (cmd.scriptId !== scriptId || cmd.playerId === playerId) return false;
@@ -205,6 +229,15 @@ app.get('/api/commands', (req, res) => {
 
             return false;
         });
+
+        // Debug: print filtered commands for this user
+        console.log('Filtered commands for this user:', filteredCommands.map(cmd => ({
+            command: cmd.command,
+            isAdminCommand: cmd.isAdminCommand,
+            playerName: cmd.playerName,
+            args: cmd.args,
+            timestamp: cmd.timestamp
+        })));
 
         res.json({ 
             success: true, 
