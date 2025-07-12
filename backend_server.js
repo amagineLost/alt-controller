@@ -77,9 +77,9 @@ app.post('/api/command', (req, res) => {
         // Handle user registration
         if (command === 'register') {
             const userData = args;
-            registeredUsers.set(playerId, {
+            registeredUsers.set(String(playerId), {
                 scriptId,
-                playerId,
+                playerId: String(playerId),
                 playerName,
                 isAuthorized: userData.isAuthorized,
                 timestamp: Date.now()
@@ -201,7 +201,7 @@ app.get('/api/commands', (req, res) => {
         }
 
         // Get current user info
-        const currentUser = registeredUsers.get(playerId);
+        const currentUser = registeredUsers.get(String(playerId));
         const isCurrentUserAdmin = currentUser ? currentUser.isAuthorized : false;
         const currentUserName = currentUser ? currentUser.playerName : null;
 
