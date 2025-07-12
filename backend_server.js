@@ -182,30 +182,28 @@ app.get('/api/commands', (req, res) => {
         // Get current user info
         const currentUser = registeredUsers.get(playerId);
         const isCurrentUserAdmin = currentUser ? currentUser.isAuthorized : false;
-        
+        const currentUserName = currentUser ? currentUser.playerName : null;
+
         // Filter commands for this script and exclude commands from this player
         const filteredCommands = commands.filter(cmd => {
-            // Basic filtering
-            if (cmd.scriptId !== scriptId || cmd.playerId === playerId) {
-                return false;
+            if (cmd.scriptId !== scriptId || cmd.playerId === playerId) return false;
+            if (cmd.timestamp < (Date.now() - 30000)) return false;
+
+            // Admin commands: send to all non-admins, or to a specific alt if targeted
+            if (cmd.isAdminCommand) {
+                if (isCurrentUserAdmin) return false; // Don't send admin commands to admins
+                if (cmd.args && cmd.args.target) {
+                    // Targeted command: only send to the correct alt
+                    return cmd.args.target === currentUserName || cmd.args.target === playerId;
+                }
+                // Otherwise, send to all alts
+                return true;
             }
-            
-            // Only commands from last 30 seconds
-            if (cmd.timestamp < (Date.now() - 30000)) {
-                return false;
-            }
-            
-            // Admin commands: only send to non-admin users
-            if (cmd.isAdminCommand && isCurrentUserAdmin) {
-                return false; // Don't send admin commands back to admins
-            }
-            
-            // Regular commands: only send to admins
-            if (!cmd.isAdminCommand && !isCurrentUserAdmin) {
-                return false; // Don't send alt commands to other alts
-            }
-            
-            return true;
+
+            // Alt commands: only send to admins
+            if (!cmd.isAdminCommand && isCurrentUserAdmin) return true;
+
+            return false;
         });
 
         res.json({ 
